@@ -37,11 +37,14 @@ export default function AnalyzerPage() {
 
             if (cachedData) {
                 const { timestamp, data } = JSON.parse(cachedData);
-                // If cache is less than 1 hour old, use it immediately
-                if (Date.now() - timestamp < 1000 * 60 * 60) {
+                // If cache is less than 1 hour old and has history, use it
+                if (Date.now() - timestamp < 1000 * 60 * 60 && data && data.length > 1) {
                     setResults(data);
                     setLoading(false);
                     return;
+                } else {
+                    // Cache is old or invalid (e.g. only 1 item from previous bug), clear it
+                    localStorage.removeItem(cachedKey);
                 }
             }
 

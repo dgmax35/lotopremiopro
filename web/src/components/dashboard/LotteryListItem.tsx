@@ -19,7 +19,11 @@ export function LotteryListItem({ lotterySlug, displayName }: LotteryListItemPro
             try {
                 const response = await fetch(`/api/loterias/${lotterySlug}/latest`);
                 const json = await response.json();
-                setData(json);
+                if (json && (json.concurso || json.numero)) {
+                    setData(json);
+                } else {
+                    console.warn(`Invalid data for ${lotterySlug}`, json);
+                }
             } catch (err) {
                 console.error(err);
             } finally {
@@ -59,7 +63,7 @@ export function LotteryListItem({ lotterySlug, displayName }: LotteryListItemPro
             {/* Results Balls */}
             <div className="flex-1 flex flex-col items-center justify-center space-y-4">
                 <div className="flex flex-wrap justify-center gap-2">
-                    {data.dezenas.map((n: string) => (
+                    {data.dezenas && Array.isArray(data.dezenas) && data.dezenas.map((n: string) => (
                         <LotteryBall
                             key={n}
                             number={n}

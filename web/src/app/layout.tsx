@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { AuthGuard } from "@/components/auth/AuthGuard";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -28,10 +29,12 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <AuthProvider>
-            <Sidebar />
-            <main className="flex-1 overflow-y-auto h-screen bg-muted/20">
-              {children}
-            </main>
+            <AuthGuard>
+              <Sidebar />
+              <main className="flex-1 overflow-y-auto h-screen bg-muted/20">
+                {children}
+              </main>
+            </AuthGuard>
           </AuthProvider>
         </ThemeProvider>
       </body>

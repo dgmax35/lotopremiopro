@@ -53,6 +53,11 @@ const sidebarItems = [
         icon: Wallet,
     },
     {
+        title: "Ganhos Possíveis",
+        href: "/possible-gains",
+        icon: BarChart3,
+    },
+    {
         title: "Biblioteca",
         href: "/library",
         icon: Library,
@@ -63,6 +68,10 @@ export function Sidebar() {
     const pathname = usePathname();
     const { isAdmin, user } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
+
+    const isAuthPage = pathname === "/login" || pathname === "/register";
+
+    if (isAuthPage) return null;
 
     console.log("Sidebar Auth Status:", { isAdmin, userEmail: user?.email });
 

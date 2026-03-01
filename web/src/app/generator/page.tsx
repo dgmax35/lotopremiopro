@@ -18,7 +18,8 @@ import {
 import { saveBet, saveBets } from "@/lib/bets";
 import { getResults } from "@/lib/api";
 import { calculateFrequencies, getTopNumbers, getBottomNumbers } from "@/lib/statistics";
-import { Settings2, Save, Play, Trash2, Sparkles, Wand2, Loader2 } from "lucide-react";
+import { calculateGameStats } from "@/lib/gameStats";
+import { Settings2, Save, Play, Trash2, Sparkles, Wand2, Loader2, BarChart2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type SystemType = "lotofacil-r5" | "lotofacil-r7" | "megasena-30" | "lotomania-65" | "quina-12" | "diadesorte-20" | "duplasena-24" | "timemania-25";
@@ -40,6 +41,7 @@ export default function GeneratorPage() {
     const [generatedGames, setGeneratedGames] = useState<number[][]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isAutoFriendLoading, setIsAutoFriendLoading] = useState(false);
+    const [range, setRange] = useState("10"); // Sync with Analyzer options
 
     const activeSystem = SYSTEMS.find(s => s.id === systemId) || SYSTEMS[0];
 
@@ -81,21 +83,25 @@ export default function GeneratorPage() {
                 return;
             }
 
-            const stats = calculateFrequencies(results.slice(0, 10), results);
+            // CRITICAL FIX: Ensure results are sorted newest to oldest, just like Analyzer
+            results.sort((a, b) => b.concurso - a.concurso);
+
+            // Apply selected range
+            const filteredResults = range === "all" ? results : results.slice(0, parseInt(range));
+            const stats = calculateFrequencies(filteredResults, results);
             let autoSelected: number[] = [];
 
-            if (activeSystem.action === "exclude") {
-                // For "Erre X", exclude the LEAST frequent (Bottom Numbers)
-                // Now sorting by count ASC, then Delay DESC (most delayed if tied)
+            if (activeSystem.id === "lotofacil-r5" || activeSystem.id === "lotofacil-r7" || activeSystem.action === "exclude") {
+                // Rule: R5 (exclude 5) and R7 (exclude 7) use the BOTTOM (menos sorteados) numbers for exclusion
                 const bottom = getBottomNumbers(stats, activeSystem.selectCount);
                 autoSelected = bottom.map(s => parseInt(s.number)).sort((a, b) => a - b);
             } else {
-                // For "Base X", select the MOST frequent (Top Numbers)
+                // For "Base X" (Mega, Quina, etc), use the TOP (mais sorteados) numbers
                 const top = getTopNumbers(stats, activeSystem.selectCount);
                 autoSelected = top.map(s => parseInt(s.number)).sort((a, b) => a - b);
             }
 
-            // If stats returned fewer numbers than needed (unlikely for large history), fill with randoms
+            // If stats returned fewer numbers than needed
             if (autoSelected.length < activeSystem.selectCount) {
                 const available = Array.from({ length: activeSystem.total }, (_, i) => i + 1)
                     .filter(n => !autoSelected.includes(n));
@@ -190,6 +196,20 @@ export default function GeneratorPage() {
                                 </select>
                             </div>
 
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold uppercase tracking-wider text-gray-500">Filtrar Histórico (Amigo Automático)</label>
+                                <select
+                                    className="flex h-11 w-full rounded-xl border-2 border-input bg-background px-3 py-2 text-sm font-bold ring-offset-background focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 transition-all"
+                                    value={range}
+                                    onChange={(e) => setRange(e.target.value)}
+                                >
+                                    <option value="10">Últimos 10</option>
+                                    <option value="20">Últimos 20</option>
+                                    <option value="50">Últimos 50</option>
+                                    <option value="100">Últimos 100</option>
+                                </select>
+                            </div>
+
                             <div className="p-4 bg-muted/50 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-800 text-sm font-medium">
                                 {activeSystem.action === "exclude" ? (
                                     <p>Escolha <strong>{activeSystem.selectCount}</strong> números para <strong>EXCLUIR</strong>. O sistema gerará jogos com os restantes.</p>
@@ -279,30 +299,45 @@ export default function GeneratorPage() {
                                 <h2 className="text-xl font-black uppercase text-gray-800 dark:text-white">Jogos Gerados ({generatedGames.length})</h2>
                             </div>
                             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                {generatedGames.map((game, idx) => (
-                                    <Card key={idx} className="relative group border-2 hover:border-[#005ca9] transition-all hover:shadow-xl rounded-2xl overflow-hidden bg-white dark:bg-card">
-                                        <div className="absolute top-0 left-0 w-full h-1 bg-gray-100 group-hover:bg-[#005ca9] transition-colors" />
-                                        <CardContent className="p-5">
-                                            <div className="flex flex-wrap gap-1.5 mb-4">
-                                                {game.map(n => (
-                                                    <span key={n} className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-100 dark:border-blue-800 text-sm font-black text-[#005ca9] dark:text-blue-400 group-hover:scale-110 transition-transform">
-                                                        {n}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                            <div className="flex justify-between items-center mt-2 border-t pt-3">
-                                                <span className="text-xs font-bold uppercase text-gray-400 tracking-wider">Aposta {idx + 1}</span>
-                                                <Button
-                                                    size="sm"
-                                                    className="h-9 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl active:scale-95 transition-all"
-                                                    onClick={() => handleSave(game, idx)}
-                                                >
-                                                    <Save className="h-4 w-4 mr-2" /> Salvar
-                                                </Button>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                ))}
+                                {generatedGames.map((game, idx) => {
+                                    const stats = calculateGameStats(game, systemId, generatedGames.length);
+                                    return (
+                                        <Card key={idx} className="relative group border-2 hover:border-[#005ca9] transition-all hover:shadow-xl rounded-2xl overflow-hidden bg-white dark:bg-card">
+                                            <div className="absolute top-0 left-0 w-full h-1 bg-gray-100 group-hover:bg-[#005ca9] transition-colors" />
+                                            <CardContent className="p-5">
+                                                <div className="flex flex-wrap gap-1.5 mb-4">
+                                                    {game.map(n => (
+                                                        <span key={n} className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-100 dark:border-blue-800 text-sm font-black text-[#005ca9] dark:text-blue-400 group-hover:scale-110 transition-transform">
+                                                            {n}
+                                                        </span>
+                                                    ))}
+                                                </div>
+
+                                                {/* STATISTICS PANEL */}
+                                                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 mb-4 text-xs font-semibold text-gray-600 dark:text-gray-300 space-y-1">
+                                                    <div className="flex items-center gap-1.5 text-[#005ca9] dark:text-blue-400">
+                                                        <BarChart2 className="w-3.5 h-3.5" />
+                                                        <span className="uppercase tracking-wider">Estatísticas</span>
+                                                    </div>
+                                                    {stats.probability && <div className="pl-5 text-emerald-600 dark:text-emerald-400">{stats.probability}</div>}
+                                                    {stats.pointsExpected && <div className="pl-5 text-amber-600 dark:text-amber-400">{stats.pointsExpected}</div>}
+                                                    <div className="pl-5 opacity-80">{stats.description}</div>
+                                                </div>
+
+                                                <div className="flex justify-between items-center mt-2 border-t pt-3">
+                                                    <span className="text-xs font-bold uppercase text-gray-400 tracking-wider">Aposta {idx + 1}</span>
+                                                    <Button
+                                                        size="sm"
+                                                        className="h-9 px-4 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl active:scale-95 transition-all"
+                                                        onClick={() => handleSave(game, idx)}
+                                                    >
+                                                        <Save className="h-4 w-4 mr-2" /> Salvar
+                                                    </Button>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )
+                                })}
                             </div>
                         </div>
                     )}

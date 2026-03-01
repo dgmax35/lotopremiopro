@@ -68,8 +68,12 @@ export async function getLatestResult(loteria: string): Promise<Resultado | null
 }
 
 export async function getResultById(loteria: string, concurso: number): Promise<Resultado | null> {
-    // Mock for ID search using the same single result from db
-    const latest = await getLatestResult(loteria);
-    if (latest && latest.concurso === concurso) return latest;
-    return null;
+    try {
+        const res = await fetch(`${BASE_URL}/${loteria}/${concurso}`);
+        if (!res.ok) return null;
+        return res.json();
+    } catch (error) {
+        console.error("API Error (Result by ID):", error);
+        return null;
+    }
 }

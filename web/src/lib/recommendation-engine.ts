@@ -30,9 +30,9 @@ export const LOTTERY_CONFIG: Record<string, {
 };
 
 interface LotteryContext {
-    weights: Record<number, number>;
     previousResult?: number[];
     hot: number[];
+    delayed: number[];
     cold: number[];
 }
 
@@ -46,35 +46,45 @@ function getContext(loteria: string): LotteryContext | null {
         if (results.length === 0) return null;
 
         const config = LOTTERY_CONFIG[loteria];
-        const weights: Record<number, number> = {};
-        for (let i = 1; i <= config.total; i++) weights[i] = 1.0; // Base weight
 
-        // Trend analysis (Last 10, 50, total)
-        const applyTrend = (slice: any[], weightMultiplier: number) => {
-            slice.forEach(r => {
-                r.dezenas.forEach((d: string) => {
-                    const n = parseInt(d);
-                    weights[n] = (weights[n] || 1) + weightMultiplier;
-                });
+        // Calculate frequency and delay
+        const counts: Record<number, number> = {};
+        const lastSeen: Record<number, number> = {};
+        const latestContest = Math.max(...results.map((r: any) => r.concurso));
+
+        for (let i = 1; i <= config.total; i++) {
+            counts[i] = 0;
+            lastSeen[i] = 0;
+        }
+
+        results.forEach((r: any) => {
+            r.dezenas.forEach((d: string) => {
+                const n = parseInt(d);
+                counts[n] = (counts[n] || 0) + 1;
+                if (!lastSeen[n] || r.concurso > lastSeen[n]) {
+                    lastSeen[n] = r.concurso;
+                }
             });
-        };
+        });
 
-        applyTrend(results.slice(0, 10), 5.0); // Recent trend is very strong
-        applyTrend(results.slice(0, 50), 2.0); // Medium trend
-        applyTrend(results, 0.5); // Historical baseline
+        const stats = [];
+        for (let i = 1; i <= config.total; i++) {
+            stats.push({
+                n: i,
+                count: counts[i],
+                delay: latestContest - (lastSeen[i] || 0)
+            });
+        }
 
-        const sorted = Object.entries(weights)
-            .map(([n, w]) => ({ n: parseInt(n), w }))
-            .sort((a, b) => b.w - a.w);
-
-        const allNumbers = sorted.map(s => s.n);
-        const qtr = Math.floor(allNumbers.length / 4);
+        const byFreqDesc = [...stats].sort((a, b) => b.count - a.count);
+        const byFreqAsc = [...stats].sort((a, b) => a.count - b.count);
+        const byDelayDesc = [...stats].sort((a, b) => b.delay - a.delay);
 
         return {
-            weights,
-            previousResult: results[0]?.dezenas.map((d: string) => parseInt(d)),
-            hot: allNumbers.slice(0, qtr),
-            cold: allNumbers.slice(-qtr)
+            previousResult: [...results].sort((a: any, b: any) => b.concurso - a.concurso)[0]?.dezenas.map((d: string) => parseInt(d)),
+            hot: byFreqDesc.map(s => s.n),
+            delayed: byDelayDesc.map(s => s.n),
+            cold: byFreqAsc.map(s => s.n)
         };
 
     } catch (e) {
@@ -100,7 +110,7 @@ export function generateRecommendedGames(loteria: string, budget: number, custom
         let valid = false;
 
         while (!valid && attempts < 500) {
-            game = generateDraftGame(loteria, config, context);
+            game = generateDraftGame(config, context);
             valid = validateGame(game, config);
             attempts++;
         }
@@ -110,14 +120,8 @@ export function generateRecommendedGames(loteria: string, budget: number, custom
     return games;
 }
 
-function generateDraftGame(loteria: string, config: any, context: LotteryContext | null): number[] {
+function generateDraftGame(config: any, context: LotteryContext | null): number[] {
     const game = new Set<number>();
-
-    // Rule for Lotofácil: Repeat 8-10 from previous
-    if (loteria === "lotofacil" && context?.previousResult) {
-        const countToRepeat = Math.floor(Math.random() * 3) + 8; // 8, 9 or 10
-        addRandomFromPool(game, context.previousResult, countToRepeat);
-    }
 
     if (!context) {
         // Pure random fallback if no context
@@ -127,21 +131,24 @@ function generateDraftGame(loteria: string, config: any, context: LotteryContext
         return Array.from(game);
     }
 
-    // Smart pick based on weights
-    const pool = Object.keys(context.weights).map(Number);
-    const totalWeight = Object.values(context.weights).reduce((a, b) => a + b, 0);
+    // Proportional Split: 60% Quentes, 30% Atrasadas, 10% Zebras (Frias)
+    const hotCount = Math.floor(config.pick * 0.6);
+    const delayedCount = Math.floor(config.pick * 0.3);
+    const coldCount = config.pick - hotCount - delayedCount;
 
-    while (game.size < config.pick) {
-        let r = Math.random() * totalWeight;
-        for (const n of pool) {
-            r -= context.weights[n];
-            if (r <= 0) {
-                game.add(n);
-                break;
-            }
-        }
-        // Safety break
-        if (game.size === pool.length) break;
+    // 1. Pick Hot
+    addRandomFromPool(game, context.hot, hotCount);
+
+    // 2. Pick Delayed
+    addRandomFromPool(game, context.delayed, delayedCount);
+
+    // 3. Pick Cold
+    addRandomFromPool(game, context.cold, coldCount);
+
+    // Fallback if we didn't get enough (due to pool exhaustion or overlaps)
+    if (game.size < config.pick) {
+        const remaining = Array.from({ length: config.total }, (_, i) => i + 1);
+        addRandomFromPool(game, remaining, config.pick - game.size);
     }
 
     return Array.from(game);
@@ -182,13 +189,19 @@ function validateGame(game: number[], config: any): boolean {
 }
 
 function addRandomFromPool(currentSet: Set<number>, pool: number[], count: number) {
-    if (pool.length === 0) return;
-    const initialSize = currentSet.size;
-    const targetSize = Math.min(initialSize + count, pool.length);
-    let attempts = 0;
-    while (currentSet.size < targetSize && attempts < 100) {
-        const idx = Math.floor(Math.random() * pool.length);
-        currentSet.add(pool[idx]);
-        attempts++;
+    if (pool.length === 0 || count <= 0) return;
+
+    const available = pool.filter(n => !currentSet.has(n));
+    const toAdd = Math.min(count, available.length);
+    let added = 0;
+
+    while (added < toAdd) {
+        const idx = Math.floor(Math.random() * available.length);
+        const num = available[idx];
+
+        currentSet.add(num);
+        added++;
+
+        available.splice(idx, 1);
     }
 }

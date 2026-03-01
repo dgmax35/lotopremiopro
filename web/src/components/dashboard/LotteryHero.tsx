@@ -19,7 +19,9 @@ export function LotteryHero({ lotterySlug, displayName }: LotteryHeroProps) {
             try {
                 const response = await fetch(`/api/loterias/${lotterySlug}/latest`);
                 const json = await response.json();
-                setData(json);
+                if (json && (json.concurso || json.numero)) {
+                    setData(json);
+                }
             } catch (err) {
                 console.error(err);
             } finally {
@@ -55,7 +57,7 @@ export function LotteryHero({ lotterySlug, displayName }: LotteryHeroProps) {
                 </div>
 
                 <div className="flex flex-wrap justify-center gap-2 md:gap-4 my-8">
-                    {data.dezenas.map((n: string) => (
+                    {data.dezenas && Array.isArray(data.dezenas) && data.dezenas.map((n: string) => (
                         <LotteryBall
                             key={n}
                             number={n}
