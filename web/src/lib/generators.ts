@@ -1,3 +1,5 @@
+import { LOTTERY_CONFIG, validateGame } from "./lottery-config";
+
 // --- PRNG Utilities ---
 
 // Generates a simple 32-bit hash from an array of numbers to use as a seed
@@ -28,6 +30,25 @@ function shuffleArray<T>(array: T[], prng: () => number) {
     }
 }
 
+// Helper to find an optimal game from a pool that respects the official smart filter strategy
+function generateValidGame(pool: number[], pick: number, config: any, prng: () => number, maxAttempts = 200): number[] {
+    let bestCandidate: number[] = [];
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const iterationPool = [...pool];
+        shuffleArray(iterationPool, prng);
+        const candidate = iterationPool.slice(0, pick).sort((a, b) => a - b);
+
+        if (attempt === 0) bestCandidate = candidate; // Fallback to first if strict rules can't be met
+
+        if (config && validateGame(candidate, config)) {
+            return candidate; // Found optimal game
+        }
+    }
+
+    return bestCandidate;
+}
+
 // Utility to check if a set is valid
 export function generateCombinations(source: number[], comboLength: number): number[][] {
     return [];
@@ -42,11 +63,10 @@ export function generateR5(excluded: number[]): number[][] {
     const games: number[][] = [];
     const seed = hashBase(excluded);
     const prng = mulberry32(seed);
+    const config = LOTTERY_CONFIG["lotofacil"];
 
     for (let i = 0; i < 24; i++) {
-        const iterationPool = [...pool];
-        shuffleArray(iterationPool, prng);
-        games.push(iterationPool.slice(0, 15).sort((a, b) => a - b));
+        games.push(generateValidGame(pool, 15, config, prng));
     }
 
     return games;
@@ -61,11 +81,10 @@ export function generateR7(excluded: number[]): number[][] {
     const games: number[][] = [];
     const seed = hashBase(excluded);
     const prng = mulberry32(seed);
+    const config = LOTTERY_CONFIG["lotofacil"];
 
     for (let i = 0; i < 24; i++) {
-        const iterationPool = [...pool];
-        shuffleArray(iterationPool, prng);
-        games.push(iterationPool.slice(0, 15).sort((a, b) => a - b));
+        games.push(generateValidGame(pool, 15, config, prng));
     }
 
     return games;
@@ -78,11 +97,10 @@ export function generateMega30(base: number[]): number[][] {
     const games: number[][] = [];
     const seed = hashBase(base);
     const prng = mulberry32(seed);
+    const config = LOTTERY_CONFIG["megasena"];
 
     for (let i = 0; i < 45; i++) {
-        const iterationPool = [...base];
-        shuffleArray(iterationPool, prng);
-        games.push(iterationPool.slice(0, 6).sort((a, b) => a - b));
+        games.push(generateValidGame(base, 6, config, prng));
     }
     return games;
 }
@@ -94,11 +112,10 @@ export function generateQuina12(base: number[]): number[][] {
     const games: number[][] = [];
     const seed = hashBase(base);
     const prng = mulberry32(seed);
+    const config = LOTTERY_CONFIG["quina"];
 
     for (let i = 0; i < 24; i++) {
-        const iterationPool = [...base];
-        shuffleArray(iterationPool, prng);
-        games.push(iterationPool.slice(0, 5).sort((a, b) => a - b));
+        games.push(generateValidGame(base, 5, config, prng));
     }
     return games;
 }
@@ -110,11 +127,10 @@ export function generateLotomania65(base: number[]): number[][] {
     const games: number[][] = [];
     const seed = hashBase(base);
     const prng = mulberry32(seed);
+    const config = LOTTERY_CONFIG["lotomania"];
 
     for (let i = 0; i < 10; i++) {
-        const iterationPool = [...base];
-        shuffleArray(iterationPool, prng);
-        games.push(iterationPool.slice(0, 50).sort((a, b) => a - b));
+        games.push(generateValidGame(base, 50, config, prng));
     }
     return games;
 }
@@ -126,11 +142,10 @@ export function generateDiaDeSorte20(base: number[]): number[][] {
     const games: number[][] = [];
     const seed = hashBase(base);
     const prng = mulberry32(seed);
+    const config = LOTTERY_CONFIG["diadesorte"];
 
     for (let i = 0; i < 10; i++) {
-        const iterationPool = [...base];
-        shuffleArray(iterationPool, prng);
-        games.push(iterationPool.slice(0, 7).sort((a, b) => a - b));
+        games.push(generateValidGame(base, 7, config, prng));
     }
     return games;
 }
@@ -142,11 +157,10 @@ export function generateDuplaSena24(base: number[]): number[][] {
     const games: number[][] = [];
     const seed = hashBase(base);
     const prng = mulberry32(seed);
+    const config = LOTTERY_CONFIG["duplasena"];
 
     for (let i = 0; i < 12; i++) {
-        const iterationPool = [...base];
-        shuffleArray(iterationPool, prng);
-        games.push(iterationPool.slice(0, 6).sort((a, b) => a - b));
+        games.push(generateValidGame(base, 6, config, prng));
     }
     return games;
 }
@@ -158,11 +172,10 @@ export function generateTimemania25(base: number[]): number[][] {
     const games: number[][] = [];
     const seed = hashBase(base);
     const prng = mulberry32(seed);
+    const config = LOTTERY_CONFIG["timemania"];
 
     for (let i = 0; i < 10; i++) {
-        const iterationPool = [...base];
-        shuffleArray(iterationPool, prng);
-        games.push(iterationPool.slice(0, 10).sort((a, b) => a - b));
+        games.push(generateValidGame(base, 10, config, prng));
     }
     return games;
 }
